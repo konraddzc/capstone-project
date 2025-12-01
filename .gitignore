@@ -165,3 +165,6 @@ config/config.yaml
 .DS_Store
 notebooks/gitignore/*
 
+#Model Files
+*.keras
+*.pkl

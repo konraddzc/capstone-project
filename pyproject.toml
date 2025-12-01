@@ -20,7 +20,7 @@ dynamic = ["dependencies"]
 Homepage = "https://github.com/"
 
 [project.scripts]
-run-app = "scripts.run_app:main"
+run_app = "scripts.run_app:main"
 run_tests = "tests.run_tests:main"
 
 [tool.setuptools.packages.find]
