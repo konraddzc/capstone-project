@@ -167,3 +167,5 @@ notebooks/gitignore/*
 *.keras
 *.pkl
 *.pt
+data/raw/datasets/clmentbisaillon/fake-and-real-news-dataset/versions/1/Fake.csv
+data/raw/datasets/clmentbisaillon/fake-and-real-news-dataset/versions/1/True.csv
