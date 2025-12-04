@@ -1,168 +1,186 @@
-import re
-import pickle
-import numpy as np
-import requests
 import streamlit as st
-import tensorflow as tf
-import pandas as pd
-from bs4 import BeautifulSoup
-from tensorflow.keras.preprocessing.sequence import pad_sequences
-from nltk.tokenize import word_tokenize
-from nltk.corpus import stopwords
-from nltk.stem import WordNetLemmatizer
-import nltk
 
-
-nltk.download("punkt")
-nltk.download("punkt_tab")
-nltk.download("stopwords")
-nltk.download("wordnet")
-
-MODEL_PATH = "../notebooks/best_model.keras"
-TOKENIZER_PATH = "../notebooks/tokenizer.pkl"
-MAXLEN = 200
-
-with open(TOKENIZER_PATH, "rb") as f:
-    tokenizer = pickle.load(f)
-
-model = tf.keras.models.load_model(MODEL_PATH)
-embedding_layer = model.layers[1]
-emb_dim = embedding_layer.output_dim
-emb_input = tf.keras.Input(shape=(MAXLEN, emb_dim))
-x = emb_input
-for layer in model.layers[2:]:
-    x = layer(x)
-rest_model = tf.keras.Model(emb_input, x)
-
-
-def fetch_article_text(url, timeout=15):
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
-    }
-    r = requests.get(url, headers=headers, timeout=timeout)
-    r.raise_for_status()
-    html = r.text
-    soup = BeautifulSoup(html, "html.parser")
-    for tag in soup(["script", "style", "noscript"]):
-        tag.decompose()
-    selectors = [
-        "article",
-        "main",
-        "div[itemprop='articleBody']",
-        "div#content",
-        "div.article-body",
-        "div.post-content",
-        "section.article",
-        "section#content",
-        "div.story-body__inner",
-    ]
-    for sel in selectors:
-        container = soup.select_one(sel)
-        if container:
-            paragraphs = container.find_all("p")
-            texts = [
-                p.get_text(" ", strip=True)
-                for p in paragraphs
-                if p.get_text(strip=True)
-            ]
-            if texts:
-                return "\n".join(texts).strip()
-    body = soup.body if soup.body else soup
-    paragraphs = body.find_all("p")
-    texts = [
-        p.get_text(" ", strip=True)
-        for p in paragraphs
-        if p.get_text(strip=True)
-    ]
-    return "\n".join(texts).strip()
-
-
-def process_text(text):
-    text = re.sub(r"\s+", " ", text, flags=re.I)
-    text = re.sub(r"\W", " ", str(text))
-    text = re.sub(r"\s+[a-zA-Z]\s+", " ", text)
-    text = re.sub(r"[^a-zA-Z\s]", "", text)
-    text = text.lower()
-    words = word_tokenize(text)
-    lemmatizer = WordNetLemmatizer()
-    words = [lemmatizer.lemmatize(word) for word in words]
-    stop_words = set(stopwords.words("english"))
-    Words = [word for word in words if word not in stop_words]
-    Words = [word for word in Words if len(word) > 3]
-    indices = np.unique(Words, return_index=True)[1]
-    cleaned_text = np.array(Words)[np.sort(indices)].tolist()
-    return cleaned_text
-
-
-def explain_url(url, top_k=20):
-    text = fetch_article_text(url)
-    tokens = process_text(text)
-    if len(tokens) == 0:
-        return {
-            "prediction": "fake",
-            "probabilities": [1.0, 0.0],
-            "important_tokens": [],
-        }
-    seq = tokenizer.texts_to_sequences([" ".join(tokens)])
-    seq = np.array(seq)
-    padded = pad_sequences(seq, maxlen=MAXLEN)
-    preds = model.predict(padded, verbose=0)
-    pred_class = int(np.argmax(preds[0]))
-    with tf.GradientTape() as tape:
-        embeddings = embedding_layer(padded)
-        tape.watch(embeddings)
-        outputs = rest_model(embeddings)
-        target = outputs[:, pred_class]
-    grads = tape.gradient(target, embeddings)
-    token_importance = tf.norm(grads, axis=-1).numpy()[0]
-    seq_ids = padded[0]
-    valid = seq_ids != 0
-    token_ids = seq_ids[valid]
-    token_scores = token_importance[valid]
-    id2word = {i: w for w, i in tokenizer.word_index.items()}
-    words = [id2word.get(int(t), "[UNK]") for t in token_ids]
-    if len(token_scores) > 0:
-        token_scores = token_scores / (token_scores.max() + 1e-8)
-    ranked = sorted(zip(words, token_scores), key=lambda x: x[1], reverse=True)
-    ranked = [(w, round(float(s), 3)) for w, s in ranked[:top_k]]
-    label = "real" if pred_class == 1 else "fake"
-    return {
-        "prediction": label,
-        "probabilities": preds[0].tolist(),
-        "important_tokens": ranked,
-    }
-
-
-st.set_page_config(page_title="Fake News Detector", layout="wide")
-st.title("Fake News Detector")
-
-url = st.text_input("Enter article URL")
-top_k = st.slider(
-    "Number of important tokens to display",
-    min_value=5,
-    max_value=50,
-    value=20,
-    step=5,
+st.set_page_config(
+    page_title="Fake News Detection Dashboard",
+    layout="wide",
 )
 
-if st.button("Analyze") and url:
-    try:
-        result = explain_url(url, top_k=top_k)
-        st.subheader("Prediction")
-        st.write(f"Label: **{result['prediction'].upper()}**")
-        probs = result["probabilities"]
-        prob_fake = probs[0] if len(probs) > 0 else None
-        prob_real = probs[1] if len(probs) > 1 else None
-        if prob_fake is not None:
-            st.write(f"Probability fake: {prob_fake:.4f}")
-        if prob_real is not None:
-            st.write(f"Probability real: {prob_real:.4f}")
-        tokens = result["important_tokens"]
-        if tokens:
-            df_tokens = pd.DataFrame(tokens, columns=["token", "importance"])
-            st.subheader("Most important tokens")
-            st.dataframe(df_tokens)
-        else:
-            st.write("No tokens extracted from the article text.")
-    except Exception as e:
-        st.error(f"Error processing URL: {e}")
+st.markdown(
+    """
+    <style>
+    .main > div {
+        padding-top: 1.5rem;
+        padding-bottom: 1.5rem;
+    }
+    .section-card {
+        border-radius: 10px;
+        padding: 1.25rem 1.5rem;
+        border: 1px solid #333333;
+        background: #111111;
+    }
+    .section-title {
+        font-size: 1.2rem;
+        font-weight: 600;
+        margin-bottom: 0.4rem;
+    }
+    .section-subtitle {
+        font-size: 0.9rem;
+        color: #bbbbbb;
+        margin-bottom: 0.8rem;
+    }
+    .badge {
+        display: inline-block;
+        padding: 0.15rem 0.55rem;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        border: 1px solid #555;
+        color: #cccccc;
+        margin-right: 0.3rem;
+        margin-bottom: 0.2rem;
+    }
+    hr {
+        border: none;
+        border-top: 1px solid #333333;
+        margin: 2rem 0 1.5rem 0;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.title("Fake News Detection Dashboard")
+
+st.markdown(
+    """
+Welcome to the fake news detection project dashboard.
+
+Use the navigation (in the sidebar) to:
+- Inspect how the model classifies **individual articles**.
+- Evaluate and compare model performance on **full datasets**.
+"""
+)
+
+st.markdown("---")
+
+col_left, col_right = st.columns([1.2, 1])
+
+with col_left:
+    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="section-title">1. Fake News Detection: Model Interpretation</div>
+        <div class="section-subtitle">
+            Analyse a single news article and see how the model arrives at its prediction.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        """
+**What you can do on that page**
+
+- Choose a **model version** (e.g. 1.0, 1.1, 2.0, 3.0).
+- Provide an article via:
+  - **URL** (automatic article text extraction), or  
+  - **Paste text** directly.
+- Run the detector to get:
+  - A **fake / real** classification with class probabilities.
+  - A **token-level explanation** (highlighted text) showing which words
+    pushed the prediction towards *fake* or *real*.
+
+**Suggested workflow**
+
+1. Start with model `3.0` (merged model) to get the latest behaviour.
+2. Paste or load an article.
+3. Inspect which phrases are highlighted as evidence for each class.
+4. Switch model versions to see how explanations and predictions differ.
+"""
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="section-title">2. Model Analysis</div>
+        <div class="section-subtitle">
+            Evaluate models on full datasets and compare their overall performance.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        """
+**What you can do on that page**
+
+- Select a **model version** (1.0 / 1.1 / 2.0 / 3.0).
+- Pick a **dataset**.
+- Choose an **evaluation subset size** and a **random seed**.
+- Run evaluation to obtain:
+  - Accuracy, precision, recall, F1 score.
+  - **Confusion matrix** (fake vs real).
+  - **ROC curve** and AUC.
+  - A detailed **classification report** (per-class metrics).
+
+**Suggested workflow**
+
+1. Run all models on the same dataset and subset size.
+2. Record accuracy, F1 for the *real* class, and AUC.
+3. Use `news_merged.csv` to check how well the merged model (`3.0`)
+   generalises across sources.
+"""
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+with col_right:
+    st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="section-title">Models available</div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        """
+<div class="badge">v1.0</div> baseline best model  
+<div class="badge">v1.1</div> finetuned on extra data  
+<div class="badge">v2.0</div> curriculum-trained model  
+<div class="badge">v3.0</div> merged model (tokenizer + data)
+""",
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        """
+**Notes**
+
+- All models are binary classifiers: **0 = fake**, **1 = real**.
+- Tokens are pre-processed using:
+  - lowercasing  
+  - lemmatization  
+  - English stopword removal  
+  - removal of tokens shorter than 4 characters
+"""
+    )
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    st.markdown(
+        """
+        <div class="section-title">How to navigate</div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        """
+- Use the **sidebar** to switch between:
+    - *Fake News Detection Tool*
+    - *Model Analysis*
+- Return here any time to recall what each page does and how to use it.
+"""
+    )
