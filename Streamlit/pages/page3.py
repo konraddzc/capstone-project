@@ -63,7 +63,7 @@ def load_selected_model(choice: str):
         model_path = "notebooks/finetuned_model.keras"
         tok_path = TOKENIZER_PATH_DEFAULT
     elif choice == "1.2":
-        model_path = "notebooks/finetuned_model.keras"
+        model_path = "notebooks/v3_model.keras"
         tok_path = TOKENIZER_PATH_DEFAULT
     elif choice == "2.0":
         model_path = "notebooks/curriculum_best_model.keras"
@@ -192,8 +192,11 @@ st.title("Model Analysis")
 
 with st.sidebar:
     st.header("Configuration")
-    model_choice = st.selectbox(
-        "Model version", ["1.0", "1.1", "1.2", "2.0", "3.0"]
+    model_choice_1 = st.selectbox(
+        "Model A version", ["1.0", "1.1", "1.2", "2.0", "3.0"], index=0
+    )
+    model_choice_2 = st.selectbox(
+        "Model B version", ["1.0", "1.1", "1.2", "2.0", "3.0"], index=1
     )
     dataset_choice = st.selectbox("Dataset", list(DATASET_PATHS.keys()))
 
@@ -204,8 +207,6 @@ with st.sidebar:
         "using the seed above."
     )
 
-
-model, tokenizer = load_selected_model(model_choice)
 DATA_PATH = DATASET_PATHS[dataset_choice]
 
 try:
@@ -226,75 +227,153 @@ y_true_eval = y_true[indices]
 st.markdown(
     f"**Dataset:** `{dataset_choice}`  \n"
     f"**Total samples:** {n_total}  \n"
-    f"**Evaluating on:** {n_eval} randomly sampled rows (seed = {int(seed)})"
+    f"**Evaluating on:** {n_eval} randomly sampled rows (seed = {int(seed)})  \n"
+    f"**Models:** v{model_choice_1} (A) vs v{model_choice_2} (B)"
 )
 
 run_eval = st.button(
-    "Run evaluation", type="primary", use_container_width=True
+    "Run comparative evaluation", type="primary", use_container_width=True
 )
 
 if run_eval:
-    if model is None or tokenizer is None:
-        st.error("Could not load the selected model or tokenizer.")
-    else:
-        with st.spinner("Running model and computing metrics..."):
-            try:
-                probs = predict_on_texts(model, tokenizer, texts_eval)
-                y_pred = np.argmax(probs, axis=1)
-                y_proba_real = probs[:, 1]
+    with st.spinner("Running models and computing metrics..."):
+        try:
+            model_a, tok_a = load_selected_model(model_choice_1)
+            model_b, tok_b = load_selected_model(model_choice_2)
 
-                acc = accuracy_score(y_true_eval, y_pred)
-                precision, recall, f1, _ = precision_recall_fscore_support(
-                    y_true_eval, y_pred, average="binary", pos_label=1
+            if model_a is None or tok_a is None:
+                st.error("Could not load Model A or its tokenizer.")
+            elif model_b is None or tok_b is None:
+                st.error("Could not load Model B or its tokenizer.")
+            else:
+                probs_a = predict_on_texts(model_a, tok_a, texts_eval)
+                probs_b = predict_on_texts(model_b, tok_b, texts_eval)
+
+                y_pred_a = np.argmax(probs_a, axis=1)
+                y_pred_b = np.argmax(probs_b, axis=1)
+
+                y_proba_real_a = probs_a[:, 1]
+                y_proba_real_b = probs_b[:, 1]
+
+                acc_a = accuracy_score(y_true_eval, y_pred_a)
+                precision_a, recall_a, f1_a, _ = (
+                    precision_recall_fscore_support(
+                        y_true_eval, y_pred_a, average="binary", pos_label=1
+                    )
                 )
 
-                cm = confusion_matrix(y_true_eval, y_pred, labels=[0, 1])
+                acc_b = accuracy_score(y_true_eval, y_pred_b)
+                precision_b, recall_b, f1_b, _ = (
+                    precision_recall_fscore_support(
+                        y_true_eval, y_pred_b, average="binary", pos_label=1
+                    )
+                )
+
+                cm_a = confusion_matrix(y_true_eval, y_pred_a, labels=[0, 1])
+                cm_b = confusion_matrix(y_true_eval, y_pred_b, labels=[0, 1])
                 class_names = ["fake", "real"]
 
-                col1, col2, col3, col4 = st.columns(4)
-                col1.metric("Accuracy", f"{acc*100:.1f}%")
-                col2.metric("Precision (real)", f"{precision*100:.1f}%")
-                col3.metric("Recall (real)", f"{recall*100:.1f}%")
-                col4.metric("F1 (real)", f"{f1*100:.1f}%")
+                col_metrics_a, col_metrics_b = st.columns(2)
 
-                left_col, right_col = st.columns(2)
+                with col_metrics_a:
+                    st.subheader(f"Model A: v{model_choice_1}")
+                    m1, m2 = st.columns(2)
+                    m3, m4 = st.columns(2)
+                    m1.metric("Accuracy", f"{acc_a*100:.1f}%")
+                    m2.metric("Precision (real)", f"{precision_a*100:.1f}%")
+                    m3.metric("Recall (real)", f"{recall_a*100:.1f}%")
+                    m4.metric("F1 (real)", f"{f1_a*100:.1f}%")
 
-                with left_col:
-                    st.subheader("Confusion matrix")
-                    fig_cm = plot_confusion_matrix(cm, class_names)
+                with col_metrics_b:
+                    st.subheader(f"Model B: v{model_choice_2}")
+                    m1b, m2b = st.columns(2)
+                    m3b, m4b = st.columns(2)
+                    m1b.metric("Accuracy", f"{acc_b*100:.1f}%")
+                    m2b.metric("Precision (real)", f"{precision_b*100:.1f}%")
+                    m3b.metric("Recall (real)", f"{recall_b*100:.1f}%")
+                    m4b.metric("F1 (real)", f"{f1_b*100:.1f}%")
+
+                st.markdown("---")
+
+                cm_col_a, cm_col_b = st.columns(2)
+                with cm_col_a:
+                    st.subheader("Confusion matrix – Model A")
+                    fig_cm_a = plot_confusion_matrix(cm_a, class_names)
                     st.pyplot(
-                        fig_cm, clear_figure=True, use_container_width=False
+                        fig_cm_a, clear_figure=True, use_container_width=False
+                    )
+                with cm_col_b:
+                    st.subheader("Confusion matrix – Model B")
+                    fig_cm_b = plot_confusion_matrix(cm_b, class_names)
+                    st.pyplot(
+                        fig_cm_b, clear_figure=True, use_container_width=False
                     )
 
-                with right_col:
-                    st.subheader("ROC curve")
-                    fig_roc = plot_roc(
-                        y_true_eval, y_proba_real, positive_label=1
+                roc_col_a, roc_col_b = st.columns(2)
+                with roc_col_a:
+                    st.subheader("ROC curve – Model A")
+                    fig_roc_a = plot_roc(
+                        y_true_eval, y_proba_real_a, positive_label=1
                     )
                     st.pyplot(
-                        fig_roc, clear_figure=True, use_container_width=False
+                        fig_roc_a, clear_figure=True, use_container_width=False
+                    )
+                with roc_col_b:
+                    st.subheader("ROC curve – Model B")
+                    fig_roc_b = plot_roc(
+                        y_true_eval, y_proba_real_b, positive_label=1
+                    )
+                    st.pyplot(
+                        fig_roc_b, clear_figure=True, use_container_width=False
                     )
 
-                st.subheader("Classification report")
-                report_dict = classification_report(
+                st.markdown("---")
+
+                tab_report_a, tab_report_b = st.tabs(
+                    [
+                        f"Classification report – Model A (v{model_choice_1})",
+                        f"Classification report – Model B (v{model_choice_2})",
+                    ]
+                )
+
+                report_dict_a = classification_report(
                     y_true_eval,
-                    y_pred,
+                    y_pred_a,
                     target_names=class_names,
                     output_dict=True,
                 )
-                report_df = (
-                    pd.DataFrame(report_dict)
+                report_df_a = (
+                    pd.DataFrame(report_dict_a)
                     .T.rename_axis("class")
                     .reset_index()
                 )
-                report_df = report_df[
+                report_df_a = report_df_a[
                     ["class", "precision", "recall", "f1-score", "support"]
                 ]
-                st.dataframe(report_df, use_container_width=True)
 
-            except Exception as e:
-                st.error(f"Error during evaluation: {e}")
+                report_dict_b = classification_report(
+                    y_true_eval,
+                    y_pred_b,
+                    target_names=class_names,
+                    output_dict=True,
+                )
+                report_df_b = (
+                    pd.DataFrame(report_dict_b)
+                    .T.rename_axis("class")
+                    .reset_index()
+                )
+                report_df_b = report_df_b[
+                    ["class", "precision", "recall", "f1-score", "support"]
+                ]
+
+                with tab_report_a:
+                    st.dataframe(report_df_a, use_container_width=True)
+                with tab_report_b:
+                    st.dataframe(report_df_b, use_container_width=True)
+
+        except Exception as e:
+            st.error(f"Error during evaluation: {e}")
 else:
     st.info(
-        "Configure the model, dataset, subset size, and seed, then click **Run evaluation**."
+        "Configure two models, the dataset, subset size, and seed, then click **Run comparative evaluation**."
     )
