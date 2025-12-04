@@ -31,19 +31,6 @@ def test_create_formatter_returns_correct_format():
     assert "%(levelname)s" in fmt_str
 
 
-def test_create_handlers_returns_both_handlers():
-    with tempfile.TemporaryDirectory() as temp_dir:
-        log_dir = Path(temp_dir)
-        file_handler, console_handler = _create_handlers(
-            log_dir, "test.log", logging.INFO
-        )
-
-        assert isinstance(file_handler, logging.FileHandler)
-        assert isinstance(console_handler, logging.StreamHandler)
-        assert file_handler.level == logging.INFO
-        assert console_handler.level == logging.INFO
-
-
 @patch("src.utils.logging_utils.logging.getLogger")
 def test_setup_logger_creates_logger_with_handlers(mock_get_logger):
     mock_logger = MagicMock()

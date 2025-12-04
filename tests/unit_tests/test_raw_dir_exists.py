@@ -4,10 +4,12 @@ from src.extract import extract
 
 
 @pytest.mark.parametrize(
-    "expected_dir",
-    [Path("data/raw")],
+    "dummy_dataset_name",
+    ["test-dataset"],
 )
-def test_extract_creates_raw_dir(monkeypatch, tmp_path, expected_dir):
+def test_extract_creates_raw_directory(
+    monkeypatch, tmp_path, dummy_dataset_name
+):
     raw_dir = tmp_path / "data" / "raw"
     monkeypatch.setattr(extract, "RAW_DIR", raw_dir)
 
