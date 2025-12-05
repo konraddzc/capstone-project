@@ -8,9 +8,9 @@ from src.utils.logging_utils import setup_logger
 
 
 def main():
-    setup_env(sys.argv)
     logger = setup_logger("etl_pipeline", "etl_pipeline.log")
-
+    for h in logger.handlers:
+        print("DEBUG handler:", type(h), getattr(h, "baseFilename", None))
     try:
         logger.info("Starting ETL pipeline")
 
