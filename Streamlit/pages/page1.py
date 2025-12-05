@@ -17,7 +17,7 @@ st.set_page_config(
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_PROCESSED = PROJECT_ROOT / "data" / "processed"
 MODELS_DIR = PROJECT_ROOT / "notebooks"
-LOG_FILE = PROJECT_ROOT / "etl_pipeline.log"
+LOG_FILE = PROJECT_ROOT / "logs" / "etl_pipeline.log"
 
 # Inject custom CSS for UI styling of titles, metrics, and badges
 st.markdown(

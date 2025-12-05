@@ -104,3 +104,4 @@
 - e2e tests
 - integration tests
 - own code comments
+- fix etl logging
