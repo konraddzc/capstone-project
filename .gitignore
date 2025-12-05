@@ -100,10 +100,8 @@ celerybeat.pid
 
 # Environments
 .env
-# Should not be committed left for demo
 .env.*
-# Should not be committed left for demo
-
+.venv311/
 .venv
 venv/
 ENV/
@@ -144,10 +142,10 @@ cython_debug/
 .vscode/
 
 # Data files
-# data/raw/
-# etl/data/processed/
-# data/output/
-
+data/raw/*
+data/processed/*
+data/output/*
+*.csv
 # Logs
 logs/
 *.log
@@ -165,3 +163,9 @@ config/config.yaml
 .DS_Store
 notebooks/gitignore/*
 
+#Model Files
+*.keras
+*.pkl
+*.pt
+data/raw/datasets/clmentbisaillon/fake-and-real-news-dataset/versions/1/Fake.csv
+data/raw/datasets/clmentbisaillon/fake-and-real-news-dataset/versions/1/True.csv

@@ -3,10 +3,10 @@ requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ETL-Project-Walkthrough"
+name = "Capstone-ETL-Project"
 version = "0.1.0"
 description = "An ETL project for extracting, transforming, and loading data."
-authors = [{name = "Your Name", email = "ewright@digitalfutures.com"}]
+authors = [{name = "Your Name", email = "kdziedzic@digitalfutures.com"}]
 readme = "README.md"
 requires-python = ">=3.6"
 classifiers = [
@@ -17,10 +17,10 @@ classifiers = [
 dynamic = ["dependencies"]
 
 [project.urls]
-Homepage = "https://github.com/de-2506-a/etl-walkthrough"
+Homepage = "https://github.com/"
 
 [project.scripts]
-run_etl = "scripts.run_etl:main"
+run_app = "scripts.run_app:main"
 run_tests = "tests.run_tests:main"
 
 [tool.setuptools.packages.find]
