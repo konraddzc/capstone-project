@@ -50,8 +50,8 @@ capstone-project/
 
 ### 1. Clone the project
 ```
-git clone https://github.com/konraddzc/capstone-project
-cd capstone-project
+git clone https://github.com/konraddzc/fake-news-detector
+cd fake-news-detector
 ```
 
 ### 2. Create and activate virtual environment
